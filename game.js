@@ -108,6 +108,12 @@ const CHALLENGE_PER_FLIGHT = 5;
 const CHALLENGE_BONUS_PER_HIT = 100;
 const CHALLENGE_PERFECT = 10000;
 
+// Extra lives ("extends"): a bonus ship at the first milestone, then every
+// interval after — an early first one hooks casual players, then it recurs.
+const EXTEND_FIRST = 10000;
+const EXTEND_INTERVAL = 30000;
+const MAX_SHIP_ICONS = 6;      // reserve ships drawn before collapsing to "+N"
+
 // Game states
 const S = {
   START: "START",
@@ -172,6 +178,8 @@ function newGame() {
     score: 0,
     stage: 0,               // becomes 1 on first startStage()
     lives: 3,               // total ships incl. the one in play
+    nextExtend: EXTEND_FIRST, // score of the next bonus ship
+    extendFlash: 0,         // >0 while the "EXTRA SHIP" banner shows
     t: 0,                   // accumulated game time (s)
 
     player: {
@@ -952,7 +960,17 @@ function updateParticles(dt) {
   }
   game.particles = game.particles.filter((p) => p.life > 0);
   if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 34);
+  if (game.extendFlash > 0) game.extendFlash = Math.max(0, game.extendFlash - dt);
   if (game.banner) { game.banner.timer -= dt; if (game.banner.timer <= 0) game.banner = null; }
+}
+
+// Award a bonus ship each time the score passes the next milestone.
+function checkExtend() {
+  while (game.score >= game.nextExtend) {
+    game.lives += 1;
+    game.extendFlash = 1.6;
+    game.nextExtend += EXTEND_INTERVAL;
+  }
 }
 
 /* ---------- 14. RENDERING ---------- */
@@ -978,10 +996,19 @@ function draw() {
   ctx.restore();
 
   drawHUD();
+  if (game.extendFlash > 0) drawExtendFlash();
 
   if (game.state === S.START) drawStart();
   else if (game.state === S.GAME_OVER) drawGameOver();
   else if (game.banner) drawBanner();
+}
+
+// Brief celebratory "EXTRA SHIP" flash when a bonus life is earned.
+function drawExtendFlash() {
+  if (Math.floor(game.extendFlash * 8) % 2 === 0) return; // blink
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = COLOR.white; ctx.font = `20px ${FONT}`;
+  ctx.fillText("EXTRA SHIP", W / 2, H * 0.34);
 }
 
 function drawStars() {
@@ -1105,10 +1132,18 @@ function drawHUD() {
 
   if (game.state === S.START || game.state === S.GAME_OVER) return;
 
-  // Reserve ships (bottom-left).
+  // Reserve ships (bottom-left). Collapse to "+N" past MAX_SHIP_ICONS so the
+  // row can't overflow when the player stacks up extra lives.
   const reserve = Math.max(0, game.lives - 1);
-  for (let i = 0; i < reserve; i++) {
+  const shown = Math.min(reserve, MAX_SHIP_ICONS);
+  for (let i = 0; i < shown; i++) {
     drawShipGlyph(MARGIN + 8 + i * 20, H - 8, COLOR.white);
+  }
+  if (reserve > shown) {
+    ctx.fillStyle = COLOR.dim;
+    ctx.font = `12px ${FONT}`;
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText("+" + (reserve - shown), MARGIN + 8 + shown * 20, H - 6);
   }
 
   // Stage flags (bottom-right): stack of small markers = current stage.
@@ -1220,8 +1255,10 @@ function loop(now) {
     updateEnemies(dt);
     handleCollisions();
     updateParticles(dt);
+    checkExtend();
   } else if (game.state === S.CHALLENGE) {
     updateChallenge(dt);
+    checkExtend();
   } else {
     updateParticles(dt);
   }

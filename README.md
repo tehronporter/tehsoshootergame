@@ -42,6 +42,7 @@ Faithful Galaga-style mechanics rendered in the minimalist white-on-Klein-blue s
   the captor to rescue it and fly two ships side-by-side with double fire.
 - **Challenging stages** — every 4th stage from 3 is a no-fire bonus round; hit as
   many as you can for a `PERFECT` bonus.
+- **Extra ships** — earn a bonus life at 10,000 points, then every 30,000.
 - **Endless & escalating** — infinite stages, soft-capped so late play stays fair.
 - Lives-only (no base), scrolling starfield, persistent high score, and a
   Galaga-style player death explosion.
