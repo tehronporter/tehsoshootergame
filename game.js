@@ -236,10 +236,13 @@ canvas.addEventListener("click", (e) => {
   }
 });
 
-/* ----- Touch controls (mobile): drag anywhere to move, finger down = fire ----- */
+/* ----- Touch controls (mobile): drag anywhere to move; the ship auto-fires -----
+   On a phone you shouldn't have to think about shooting — just dodge. So on
+   touch devices the ship fires continuously while alive and touch only steers. */
 const IS_TOUCH = ("ontouchstart" in window) ||
   (navigator.maxTouchPoints > 0) ||
   (window.matchMedia && matchMedia("(pointer: coarse)").matches);
+let autoFire = IS_TOUCH; // touch = always-on auto-fire (desktop still fires on input)
 
 let pendingTouchDX = 0;   // canvas-space horizontal drag to apply next frame
 let touchFire = false;    // a finger is down → autofire
@@ -434,14 +437,15 @@ function updatePlayer(dt) {
 
   updateRapid(dt, true);
   p.fireTimer -= dt;
-  if (keys[" "] || touchFire) tryFire(); // holding / finger-down = steady autofire
+  // Desktop: press/hold/tap. Touch: always-on auto-fire (just dodge).
+  if (keys[" "] || touchFire || autoFire) tryFire();
 }
 
 // Spool the rapid meter up while firing, down while idle. Holding (or touch
 // auto-fire) ramps to HOLD_CEILING; rapid tapping pushes past it toward full.
 function updateRapid(dt, controllable) {
   const p = game.player;
-  const holding = controllable && (keys[" "] || touchFire);
+  const holding = controllable && (keys[" "] || touchFire || autoFire);
   const tapping = controllable && p.lastPressAt >= 0 && (game.t - p.lastPressAt) < RAPID_WINDOW;
   if (tapping) {
     p.rapid = Math.min(1, p.rapid + TAP_CHARGE * dt);
@@ -1177,8 +1181,8 @@ function drawStart() {
 
   ctx.fillStyle = COLOR.dim; ctx.font = `12px ${FONT}`;
   if (IS_TOUCH) {
-    ctx.fillText("DRAG TO MOVE", W / 2, H / 2 + 122);
-    ctx.fillText("HOLD TO FIRE", W / 2, H / 2 + 142);
+    ctx.fillText("DRAG TO MOVE AND DODGE", W / 2, H / 2 + 122);
+    ctx.fillText("THE SHIP FIRES BY ITSELF", W / 2, H / 2 + 142);
   } else {
     ctx.fillText("MOVE: A / D  OR  ARROWS", W / 2, H / 2 + 122);
     ctx.fillText("FIRE: SPACE", W / 2, H / 2 + 142);
