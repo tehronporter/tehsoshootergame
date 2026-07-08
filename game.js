@@ -34,15 +34,22 @@ const PLAYER_H = 14;
 const PLAYER_SPEED = 250;
 const PLAYER_Y = H - 92;
 const DUAL_GAP = 9;            // half-distance between the two dual ships
-const FIRE_COOLDOWN = 0.16;    // s between shots
+const FIRE_COOLDOWN = 0.13;    // s between held-autofire shots (tapping bypasses this)
 const RESPAWN_INVULN = 1.6;    // s of blink invulnerability after a death
 const PLAYER_DEATH_TIME = 0.95;// s the death explosion plays before respawn
 
 // Player bullets
-const BULLET_SPEED = 460;
+const BULLET_SPEED = 500;      // base speed
 const BULLET_W = 2;
 const BULLET_H = 10;
-// Galaga: only 2 shots on screen at once (4 when dual).
+
+// Rapid-fire: pressing quickly builds a meter that makes shots travel faster
+// AND raises the on-screen bullet cap, so tapping speed = more, faster shots.
+const BULLET_SPEED_BOOST = 0.85; // up to +85% bullet speed when the meter is full
+const RAPID_WINDOW = 0.2;        // presses closer than this (s) build the meter
+const RAPID_RISE = 0.34;         // meter gain per rapid shot
+const RAPID_DECAY = 1.3;         // meter falloff per second
+const MAX_BULLET_BONUS = 2;      // extra on-screen bullets at full meter
 
 // Enemy bullets
 const EBULLET_SPEED = 235;
@@ -169,6 +176,8 @@ function newGame() {
       invuln: 0,
       fireTimer: 0,
       dying: 0,             // >0 while the death explosion plays
+      lastPressAt: -1,      // game time of the previous fire press (for rapid meter)
+      rapid: 0,             // 0..1 rapid-fire meter
       captured: false,      // this ship is currently held by a boss
     },
 
@@ -392,6 +401,7 @@ function playerHalfSpan() { return game.player.dual ? DUAL_GAP + PLAYER_W / 2 : 
 
 function updatePlayer(dt) {
   const p = game.player;
+  p.rapid = Math.max(0, p.rapid - RAPID_DECAY * dt); // meter cools if you stop tapping
 
   // Death explosion: play it out, then respawn (or end the game).
   if (p.dying > 0) {
@@ -423,20 +433,30 @@ function updatePlayer(dt) {
 }
 
 function spawnPlayerShots() {
-  for (const cx of shipXs()) game.bullets.push({ x: cx - BULLET_W / 2, y: PLAYER_Y - PLAYER_H });
+  const p = game.player;
+  const speed = BULLET_SPEED * (1 + p.rapid * BULLET_SPEED_BOOST);
+  for (const cx of shipXs()) {
+    game.bullets.push({ x: cx - BULLET_W / 2, y: PLAYER_Y - PLAYER_H, speed });
+  }
 }
 function canFire() {
   const p = game.player;
   if (p.dying > 0 || p.captured) return false;
-  return game.bullets.length < (p.dual ? 4 : 2); // shots-on-screen cap
+  // Base cap (2 single / 4 dual) grows by up to MAX_BULLET_BONUS while hot.
+  const cap = (p.dual ? 4 : 2) + Math.round(p.rapid * MAX_BULLET_BONUS);
+  return game.bullets.length < cap;
 }
-// Discrete tap: fires instantly, limited only by shots on screen — so the
-// faster you tap, the faster you shoot.
+// Discrete tap. Every press heats the rapid meter — even when the screen is
+// full — so mashing opens the bullet cap and speeds shots up, then fires if a
+// slot is free. The faster you press, the faster/denser your fire.
 function firePress() {
   if (game.state !== S.PLAYING && game.state !== S.CHALLENGE) return;
-  if (!canFire()) return;
-  spawnPlayerShots();
-  game.player.fireTimer = FIRE_COOLDOWN;
+  const p = game.player;
+  if (p.dying > 0 || p.captured) return;
+  const gap = p.lastPressAt < 0 ? Infinity : game.t - p.lastPressAt;
+  p.lastPressAt = game.t;
+  if (gap < RAPID_WINDOW) p.rapid = Math.min(1, p.rapid + RAPID_RISE);
+  if (canFire()) { spawnPlayerShots(); p.fireTimer = FIRE_COOLDOWN; }
 }
 // Held: steady autofire at the cooldown cadence (never faster than tapping).
 function tryFire() {
@@ -473,7 +493,7 @@ function killPlayerShip() {
 
 /* ---------- 9. BULLETS ---------- */
 function updateBullets(dt) {
-  for (const b of game.bullets) b.y -= BULLET_SPEED * dt;
+  for (const b of game.bullets) b.y -= (b.speed || BULLET_SPEED) * dt;
   game.bullets = game.bullets.filter((b) => b.y + BULLET_H > 0);
 
   for (const b of game.ebullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
