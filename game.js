@@ -34,6 +34,11 @@ const PLAYER_H = 14;
 const PLAYER_SPEED = 250;
 const PLAYER_Y = H - 92;
 const DUAL_GAP = 9;            // half-distance between the two dual ships
+
+// Mobile control bar (touch slide zone), sits well below the ship.
+const BAR_PAD = 12;           // inset from the play edges
+const BAR_H = 20;             // track height
+const BAR_Y = H - 46;         // track top
 const FIRE_COOLDOWN = 0.13;    // s between held-autofire shots (tapping bypasses this)
 const RESPAWN_INVULN = 1.6;    // s of blink invulnerability after a death
 const PLAYER_DEATH_TIME = 0.95;// s the death explosion plays before respawn
@@ -244,18 +249,29 @@ canvas.addEventListener("click", (e) => {
   }
 });
 
-/* ----- Touch controls (mobile): drag anywhere to move; the ship auto-fires -----
-   On a phone you shouldn't have to think about shooting — just dodge. So on
-   touch devices the ship fires continuously while alive and touch only steers. */
+/* ----- Touch controls (mobile): a slide bar steers; the ship auto-fires -------
+   On a phone you shouldn't think about shooting — just dodge. The ship fires
+   continuously while alive. Steering uses ABSOLUTE mapping (finger x -> ship x)
+   so the player slides along the on-screen control bar near the bottom, keeping
+   their thumb well BELOW the ship instead of covering it. */
 const IS_TOUCH = ("ontouchstart" in window) ||
   (navigator.maxTouchPoints > 0) ||
   (window.matchMedia && matchMedia("(pointer: coarse)").matches);
-let autoFire = IS_TOUCH; // touch = always-on auto-fire (desktop still fires on input)
+// Single mobile-mode flag (auto-fire + slide bar + touch labels). Defaults to
+// device detection; kept mutable so the whole touch UI can be toggled together.
+let touchUI = IS_TOUCH;
 
-let pendingTouchDX = 0;   // canvas-space horizontal drag to apply next frame
+let touchTargetX = null;  // ship x the finger is pointing at (null = untouched)
 let touchFire = false;    // a finger is down → autofire
 let activeTouchId = null; // the finger currently steering
-let lastTouchX = 0;
+
+// Map a touch's screen x to a clamped ship x in canvas space.
+function touchToShipX(clientX) {
+  const r = canvas.getBoundingClientRect();
+  const cx = (clientX - r.left) * (W / r.width);
+  const span = playerHalfSpan();
+  return clamp(cx, PLAY_LEFT + span, PLAY_RIGHT - span);
+}
 
 canvas.addEventListener("touchstart", (e) => {
   e.preventDefault();
@@ -263,21 +279,16 @@ canvas.addEventListener("touchstart", (e) => {
   const t = e.changedTouches[0];
   if (game.state === S.START) { startGame(); return; }
   if (game.state === S.GAME_OVER) { restartGame(); return; }
-  // Begin steering with this finger and fire immediately.
   activeTouchId = t.identifier;
-  lastTouchX = t.clientX;
+  touchTargetX = touchToShipX(t.clientX);
   touchFire = true;
-  firePress();
 }, { passive: false });
 
 canvas.addEventListener("touchmove", (e) => {
   e.preventDefault();
-  const r = canvas.getBoundingClientRect();
-  const scale = W / r.width;
   for (const t of e.changedTouches) {
     if (t.identifier !== activeTouchId) continue;
-    pendingTouchDX += (t.clientX - lastTouchX) * scale; // relative drag → 1:1 feel
-    lastTouchX = t.clientX;
+    touchTargetX = touchToShipX(t.clientX);
   }
 }, { passive: false });
 
@@ -306,8 +317,18 @@ async function requestWakeLock() {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && game && game.state !== S.START) requestWakeLock();
 });
-const BTN = { w: 170, h: 40 };
-function buttonRect() { return { x: W / 2 - BTN.w / 2, y: H / 2 + 46, w: BTN.w, h: BTN.h }; }
+const BTN_H = 48;
+const BTN_PAD_X = 30;         // horizontal breathing room around the label
+function buttonLabel() {
+  if (game.state === S.START) return touchUI ? "TAP TO START" : "START";
+  return touchUI ? "TAP TO RESTART" : "RESTART";
+}
+// Button sized to its label so text never crowds the border.
+function buttonRect() {
+  ctx.font = `16px ${FONT}`;
+  const w = Math.ceil(ctx.measureText(buttonLabel()).width) + BTN_PAD_X * 2;
+  return { x: W / 2 - w / 2, y: H / 2 + 46, w, h: BTN_H };
+}
 function pointInButton(mx, my) {
   const b = buttonRect();
   return mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h;
@@ -419,7 +440,6 @@ function updatePlayer(dt) {
 
   // Death explosion: play it out, then respawn (or end the game).
   if (p.dying > 0) {
-    pendingTouchDX = 0;
     updateRapid(dt, false); // cools down
     p.dying -= dt;
     if (p.dying <= 0) {
@@ -431,29 +451,29 @@ function updatePlayer(dt) {
     return; // no control while exploding
   }
 
-  if (p.captured) { pendingTouchDX = 0; updateRapid(dt, false); return; } // no control
+  if (p.captured) { updateRapid(dt, false); return; } // no control
   if (p.invuln > 0) p.invuln -= dt;
 
+  // Keyboard: velocity. Touch: slide the ship toward the finger's x (absolute).
   let dir = 0;
   if (keys["arrowleft"] || keys["a"]) dir -= 1;
   if (keys["arrowright"] || keys["d"]) dir += 1;
   p.x += dir * PLAYER_SPEED * dt;
-  p.x += pendingTouchDX;      // touch drag (relative)
-  pendingTouchDX = 0;
+  if (touchTargetX !== null) p.x += (touchTargetX - p.x) * Math.min(1, dt * 22);
   const span = playerHalfSpan();
   p.x = clamp(p.x, PLAY_LEFT + span, PLAY_RIGHT - span);
 
   updateRapid(dt, true);
   p.fireTimer -= dt;
   // Desktop: press/hold/tap. Touch: always-on auto-fire (just dodge).
-  if (keys[" "] || touchFire || autoFire) tryFire();
+  if (keys[" "] || touchFire || touchUI) tryFire();
 }
 
 // Spool the rapid meter up while firing, down while idle. Holding (or touch
 // auto-fire) ramps to HOLD_CEILING; rapid tapping pushes past it toward full.
 function updateRapid(dt, controllable) {
   const p = game.player;
-  const holding = controllable && (keys[" "] || touchFire || autoFire);
+  const holding = controllable && (keys[" "] || touchFire || touchUI);
   const tapping = controllable && p.lastPressAt >= 0 && (game.t - p.lastPressAt) < RAPID_WINDOW;
   if (tapping) {
     p.rapid = Math.min(1, p.rapid + TAP_CHARGE * dt);
@@ -992,6 +1012,7 @@ function draw() {
     drawParticles();
     drawFreedShip();
     drawPlayer();
+    if (touchUI) drawControlBar();
   }
   ctx.restore();
 
@@ -1113,6 +1134,40 @@ function drawFreedShip() {
   if (game.freedShip) drawShipGlyph(game.freedShip.x, game.freedShip.y, COLOR.white);
 }
 
+// Mobile steering guide: a labelled slide track with a handle at the ship's x.
+// Sits below the ship so the thumb rests here instead of covering it.
+function drawControlBar() {
+  const x0 = PLAY_LEFT + BAR_PAD, x1 = PLAY_RIGHT - BAR_PAD;
+  const w = x1 - x0, cy = BAR_Y + BAR_H / 2;
+
+  ctx.strokeStyle = COLOR.faint;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x0, BAR_Y, w, BAR_H);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = COLOR.dim;
+  ctx.font = `13px ${FONT}`;
+  ctx.fillText("◄", x0 + 13, cy);
+  ctx.fillText("►", x1 - 13, cy);
+
+  // "SLIDE" hint just above the bar (fades out after the first stage).
+  if (game.stage <= 1) {
+    ctx.fillStyle = COLOR.faint;
+    ctx.font = `10px ${FONT}`;
+    ctx.textBaseline = "bottom";
+    ctx.fillText("SLIDE TO MOVE", (x0 + x1) / 2, BAR_Y - 4);
+  }
+
+  // Handle at the ship's position along the track.
+  const span = playerHalfSpan();
+  const t = (game.player.x - (PLAY_LEFT + span)) / ((PLAY_RIGHT - span) - (PLAY_LEFT + span));
+  const hx = x0 + clamp(t, 0, 1) * w;
+  const hw = 30;
+  ctx.fillStyle = COLOR.white;
+  ctx.fillRect(hx - hw / 2, BAR_Y + 3, hw, BAR_H - 6);
+}
+
 function drawHUD() {
   ctx.textBaseline = "top";
   ctx.font = `12px ${FONT}`;
@@ -1191,13 +1246,13 @@ function drawBanner() {
   ctx.globalAlpha = 1;
 }
 
-function drawButton(label) {
+function drawButton() {
   const b = buttonRect();
   ctx.strokeStyle = COLOR.white; ctx.lineWidth = 1;
   ctx.strokeRect(b.x, b.y, b.w, b.h);
   ctx.fillStyle = COLOR.white; ctx.font = `16px ${FONT}`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(label, W / 2, b.y + b.h / 2);
+  ctx.fillText(buttonLabel(), W / 2, b.y + b.h / 2);
 }
 
 function drawStart() {
@@ -1212,10 +1267,10 @@ function drawStart() {
   ctx.fillStyle = COLOR.dim;
   ctx.fillText("◈  ✦  ✧", W / 2, H / 2 - 40);
 
-  drawButton(IS_TOUCH ? "[ TAP TO START ]" : "[ START ]");
+  drawButton();
 
   ctx.fillStyle = COLOR.dim; ctx.font = `12px ${FONT}`;
-  if (IS_TOUCH) {
+  if (touchUI) {
     ctx.fillText("DRAG TO MOVE AND DODGE", W / 2, H / 2 + 122);
     ctx.fillText("THE SHIP FIRES BY ITSELF", W / 2, H / 2 + 142);
   } else {
@@ -1235,9 +1290,9 @@ function drawGameOver() {
     ctx.fillStyle = COLOR.white;
     ctx.fillText("NEW HIGH SCORE", W / 2, H / 2 + 4);
   }
-  drawButton(IS_TOUCH ? "[ TAP TO RESTART ]" : "[ RESTART ]");
+  drawButton();
   ctx.fillStyle = COLOR.dim; ctx.font = `12px ${FONT}`;
-  ctx.fillText(IS_TOUCH ? "TAP ANYWHERE TO RESTART" : "PRESS R TO RESTART", W / 2, H / 2 + 122);
+  ctx.fillText(touchUI ? "TAP ANYWHERE TO RESTART" : "PRESS R TO RESTART", W / 2, H / 2 + 122);
 }
 
 /* ---------- 15. GAME LOOP ---------- */
@@ -1273,7 +1328,7 @@ function loop(now) {
 /* ---------- 16. START / RESTART ---------- */
 function startGame() {
   spaceHeld = false; // don't carry a held key into the new game
-  touchFire = false; activeTouchId = null; pendingTouchDX = 0;
+  touchFire = false; activeTouchId = null; touchTargetX = null;
   requestWakeLock();
   game = newGame();
   startStage(); // stage 1: sets state + fly-in entrances (_launchBase set inside)
