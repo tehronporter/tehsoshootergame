@@ -7,13 +7,15 @@ images beyond the app icons, no build step — just HTML, CSS, and vanilla JS on
 
 ## Play
 
-Open `signal-core/index.html` in a browser, or serve the folder:
+Open `index.html` in a browser, or serve the folder:
 
 ```bash
-cd signal-core
 python3 -m http.server 4173
 # then visit http://localhost:4173
 ```
+
+It's a static site with no build step, so it deploys as-is to any static host
+(Vercel, Netlify, GitHub Pages, Cloudflare Pages) — just point it at the repo root.
 
 ### Controls
 
@@ -54,10 +56,9 @@ wake lock during play.
 ## Structure
 
 ```
-signal-core/
-  index.html      # canvas + PWA meta tags
-  style.css       # Klein-blue layout, mobile/touch hardening
-  game.js         # full game engine
-  manifest.json   # PWA manifest
-  icon-*.png      # app icons
+index.html      # canvas + PWA meta tags
+style.css       # Klein-blue layout, mobile/touch hardening
+game.js         # full game engine
+manifest.json   # PWA manifest
+icon-*.png      # app icons
 ```
