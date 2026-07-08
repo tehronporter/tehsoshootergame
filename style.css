@@ -50,7 +50,10 @@ body {
 .frame {
   border: 1px solid var(--white);
   line-height: 0;
-  width: min(480px, 96vw, calc(96svh * 0.75));
+  /* --wh is the width/height ratio (0.75 = 3:4 desktop; JS sets 0.6 = 3:5 on
+     mobile for a taller playfield). Height-limits the frame so it fills the
+     screen without overflowing. aspect-ratio is also overridden by JS on mobile. */
+  width: min(480px, 96vw, calc(96svh * var(--wh, 0.75)));
   aspect-ratio: 480 / 640;
 }
 

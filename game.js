@@ -12,8 +12,29 @@
 /* ---------- 1. CANVAS SETUP ---------- */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+
+// Touch detection (also used for the mobile UI). Computed here because it
+// decides the playfield height below, before W/H are read. A "?touch" URL flag
+// forces mobile mode (handy for testing the phone layout on a desktop).
+const IS_TOUCH = /[?&]touch\b/.test(location.search) ||
+  ("ontouchstart" in window) ||
+  (navigator.maxTouchPoints > 0) ||
+  (window.matchMedia && matchMedia("(pointer: coarse)").matches);
+
+// Mobile gets a TALLER playfield (3:5) so it fills the phone screen and gives
+// more dodge room; desktop stays 3:4. Set the backing store + frame shape to
+// match before anything reads the dimensions.
+if (IS_TOUCH) {
+  canvas.height = 800;
+  const frame = document.querySelector(".frame");
+  if (frame) {
+    document.documentElement.style.setProperty("--wh", String(canvas.width / canvas.height));
+    frame.style.aspectRatio = canvas.width + " / " + canvas.height;
+  }
+}
+
 const W = canvas.width;   // 480
-const H = canvas.height;  // 640
+const H = canvas.height;  // 640 desktop / 800 mobile
 
 /* ---------- 2. CONSTANTS ---------- */
 const COLOR = {
@@ -37,8 +58,8 @@ const DUAL_GAP = 9;            // half-distance between the two dual ships
 
 // Mobile control bar (touch slide zone), sits well below the ship.
 const BAR_PAD = 12;           // inset from the play edges
-const BAR_H = 20;             // track height
-const BAR_Y = H - 46;         // track top
+const BAR_H = 26;             // track height
+const BAR_Y = H - 54;         // track top (lifted off the bottom border)
 const FIRE_COOLDOWN = 0.13;    // s between held-autofire shots (tapping bypasses this)
 const RESPAWN_INVULN = 1.6;    // s of blink invulnerability after a death
 const PLAYER_DEATH_TIME = 0.95;// s the death explosion plays before respawn
@@ -254,9 +275,6 @@ canvas.addEventListener("click", (e) => {
    continuously while alive. Steering uses ABSOLUTE mapping (finger x -> ship x)
    so the player slides along the on-screen control bar near the bottom, keeping
    their thumb well BELOW the ship instead of covering it. */
-const IS_TOUCH = ("ontouchstart" in window) ||
-  (navigator.maxTouchPoints > 0) ||
-  (window.matchMedia && matchMedia("(pointer: coarse)").matches);
 // Single mobile-mode flag (auto-fire + slide bar + touch labels). Defaults to
 // device detection; kept mutable so the whole touch UI can be toggled together.
 let touchUI = IS_TOUCH;
@@ -1147,25 +1165,25 @@ function drawControlBar() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = COLOR.dim;
-  ctx.font = `13px ${FONT}`;
-  ctx.fillText("◄", x0 + 13, cy);
-  ctx.fillText("►", x1 - 13, cy);
+  ctx.font = `14px ${FONT}`;
+  ctx.fillText("◄", x0 + 14, cy);
+  ctx.fillText("►", x1 - 14, cy);
 
-  // "SLIDE" hint just above the bar (fades out after the first stage).
-  if (game.stage <= 1) {
+  // "SLIDE TO MOVE" hint above the bar for the first few stages.
+  if (game.stage <= 2) {
     ctx.fillStyle = COLOR.faint;
     ctx.font = `10px ${FONT}`;
     ctx.textBaseline = "bottom";
-    ctx.fillText("SLIDE TO MOVE", (x0 + x1) / 2, BAR_Y - 4);
+    ctx.fillText("SLIDE TO MOVE", (x0 + x1) / 2, BAR_Y - 5);
   }
 
-  // Handle at the ship's position along the track.
+  // Handle at the ship's position along the track — the bright thing to grab.
   const span = playerHalfSpan();
   const t = (game.player.x - (PLAY_LEFT + span)) / ((PLAY_RIGHT - span) - (PLAY_LEFT + span));
   const hx = x0 + clamp(t, 0, 1) * w;
-  const hw = 30;
+  const hw = 40;
   ctx.fillStyle = COLOR.white;
-  ctx.fillRect(hx - hw / 2, BAR_Y + 3, hw, BAR_H - 6);
+  ctx.fillRect(hx - hw / 2, BAR_Y + 4, hw, BAR_H - 8);
 }
 
 function drawHUD() {
@@ -1187,48 +1205,53 @@ function drawHUD() {
 
   if (game.state === S.START || game.state === S.GAME_OVER) return;
 
-  // Reserve ships (bottom-left). Collapse to "+N" past MAX_SHIP_ICONS so the
-  // row can't overflow when the player stacks up extra lives.
+  // Status placement: on mobile the bottom is the control zone, so lives and
+  // stage live under the score row at the TOP. Desktop keeps them at the bottom.
+  if (touchUI) {
+    drawReserveShips(52);
+    drawStageBadge(46);
+  } else {
+    drawReserveShips(H - 8);
+    drawStageBadge(H - 14);
+  }
+}
+
+// Reserve ships as small triangles, left side, collapsing to "+N" past
+// MAX_SHIP_ICONS so the row can't overflow when lives stack up.
+function drawReserveShips(baseY) {
   const reserve = Math.max(0, game.lives - 1);
   const shown = Math.min(reserve, MAX_SHIP_ICONS);
-  for (let i = 0; i < shown; i++) {
-    drawShipGlyph(MARGIN + 8 + i * 20, H - 8, COLOR.white);
-  }
+  for (let i = 0; i < shown; i++) drawShipGlyph(MARGIN + 8 + i * 20, baseY, COLOR.white);
   if (reserve > shown) {
     ctx.fillStyle = COLOR.dim;
     ctx.font = `12px ${FONT}`;
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-    ctx.fillText("+" + (reserve - shown), MARGIN + 8 + shown * 20, H - 6);
+    ctx.fillText("+" + (reserve - shown), MARGIN + 8 + shown * 20, baseY + 2);
   }
-
-  // Stage flags (bottom-right): stack of small markers = current stage.
-  drawStageFlags();
 }
 
-// Galaga-ish stage badges: greedily decompose the stage number into
-// 50/30/20/10/5/1 flags (bigger denominations shown brighter). Capped so
-// the bar never floods at very high stages.
-function drawStageFlags() {
+// Galaga-ish stage badge: "STAGE nn" plus flag pennants (stage number greedily
+// decomposed into 50/30/20/10/5/1), right-aligned, flags at flagY, text above.
+function drawStageBadge(flagY) {
   const denoms = [50, 30, 20, 10, 5, 1];
   let n = game.stage;
   let x = W - MARGIN;
-  const y = H - 14;
   let drawn = 0;
   for (const d of denoms) {
     while (n >= d && drawn < 12) {
       n -= d; drawn++; x -= 11;
       ctx.fillStyle = d >= 10 ? COLOR.white : COLOR.dim;
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 8, y + 3);
-      ctx.lineTo(x, y + 6);
+      ctx.moveTo(x, flagY);
+      ctx.lineTo(x + 8, flagY + 3);
+      ctx.lineTo(x, flagY + 6);
       ctx.closePath();
       ctx.fill();
     }
   }
   ctx.textAlign = "right"; ctx.textBaseline = "bottom";
   ctx.fillStyle = COLOR.dim; ctx.font = `11px ${FONT}`;
-  ctx.fillText("STAGE " + pad(game.stage, 2), W - MARGIN, y - 3);
+  ctx.fillText("STAGE " + pad(game.stage, 2), W - MARGIN, flagY - 3);
 }
 
 /* ----- Overlays ----- */
