@@ -1,8 +1,8 @@
 /* ============================================================
-   SIGNAL CORE — a Galaga-style minimalist arcade shooter.
+   SHAPE SHOOTER — a minimal arcade shooter.
    Klein blue + white only. Monospace. Brutal minimalist.
 
-   Galaga fidelity: fly-in entrances along curved paths, a
+   Mechanics: fly-in entrances along curved paths, a
    breathing/swaying top formation, enemies that peel off in
    banking dives and loop back to their slot, tractor-beam
    capture + dual-fighter rescue, and challenging bonus stages.
@@ -1281,9 +1281,9 @@ function drawButton() {
 function drawStart() {
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillStyle = COLOR.white; ctx.font = `36px ${FONT}`;
-  ctx.fillText("SIGNAL CORE", W / 2, H / 2 - 110);
+  ctx.fillText("SHAPE SHOOTER", W / 2, H / 2 - 110);
   ctx.fillStyle = COLOR.dim; ctx.font = `13px ${FONT}`;
-  ctx.fillText("A MINIMAL GALAGA-STYLE SHOOTER", W / 2, H / 2 - 76);
+  ctx.fillText("A MINIMAL SHOOTER GAME", W / 2, H / 2 - 76);
 
   // tiny legend of the enemy tiers
   ctx.font = `14px ${FONT}`;

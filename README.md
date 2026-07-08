@@ -1,6 +1,6 @@
-# Signal Core
+# Shape Shooter
 
-A minimal, Galaga-style browser arcade shooter. Brutalist design: **Klein blue
+A minimal shooter game for the browser. Brutalist design: **Klein blue
 background, white-only elements, thin borders, monospace UI.** No libraries, no
 images beyond the app icons, no build step — just HTML, CSS, and vanilla JS on a
 `<canvas>`.
@@ -31,7 +31,7 @@ It's a static site with no build step, so it deploys as-is to any static host
 
 ## Gameplay
 
-Faithful Galaga-style mechanics rendered in the minimalist white-on-Klein-blue style:
+Classic arcade mechanics rendered in the minimalist white-on-Klein-blue style:
 
 - **Fly-in entrances** — enemies swoop in along curved paths and settle into a
   breathing, swaying formation at the top.
@@ -45,7 +45,7 @@ Faithful Galaga-style mechanics rendered in the minimalist white-on-Klein-blue s
 - **Extra ships** — earn a bonus life at 10,000 points, then every 30,000.
 - **Endless & escalating** — infinite stages, soft-capped so late play stays fair.
 - Lives-only (no base), scrolling starfield, persistent high score, and a
-  Galaga-style player death explosion.
+  retro player death explosion.
 
 ## Mobile / iOS
 

@@ -1,7 +1,7 @@
 {
-  "name": "Signal Core",
-  "short_name": "Signal Core",
-  "description": "A minimal Galaga-style arcade shooter.",
+  "name": "Shape Shooter",
+  "short_name": "Shape Shooter",
+  "description": "A minimal shooter game.",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#002FA7",
