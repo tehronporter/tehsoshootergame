@@ -43,13 +43,17 @@ const BULLET_SPEED = 500;      // base speed
 const BULLET_W = 2;
 const BULLET_H = 10;
 
-// Rapid-fire: pressing quickly builds a meter that makes shots travel faster
-// AND raises the on-screen bullet cap, so tapping speed = more, faster shots.
-const BULLET_SPEED_BOOST = 0.85; // up to +85% bullet speed when the meter is full
-const RAPID_WINDOW = 0.2;        // presses closer than this (s) build the meter
-const RAPID_RISE = 0.34;         // meter gain per rapid shot
-const RAPID_DECAY = 1.3;         // meter falloff per second
-const MAX_BULLET_BONUS = 2;      // extra on-screen bullets at full meter
+// Rapid-fire meter (0..1): raises bullet speed AND the on-screen bullet cap.
+// It spools UP while firing so both inputs feel great:
+//   - Touch / held fire (the natural mobile interaction) ramps to HOLD_CEILING.
+//   - Rapid tapping on desktop pushes past it toward full for a skill edge.
+const BULLET_SPEED_BOOST = 0.9;  // up to +90% bullet speed at full meter
+const MAX_BULLET_BONUS = 2;      // up to +2 on-screen bullets at full meter
+const HOLD_CEILING = 0.6;        // meter cap reachable by simply holding/auto-firing
+const HOLD_CHARGE = 1.1;         // spool-up rate/s while holding or touch-firing
+const TAP_CHARGE = 1.5;          // faster spool-up/s while rapidly tapping
+const RAPID_DECAY = 1.6;         // meter falloff/s when not firing
+const RAPID_WINDOW = 0.25;       // a press within this (s) counts as "still tapping"
 
 // Enemy bullets
 const EBULLET_SPEED = 235;
@@ -401,11 +405,11 @@ function playerHalfSpan() { return game.player.dual ? DUAL_GAP + PLAYER_W / 2 : 
 
 function updatePlayer(dt) {
   const p = game.player;
-  p.rapid = Math.max(0, p.rapid - RAPID_DECAY * dt); // meter cools if you stop tapping
 
   // Death explosion: play it out, then respawn (or end the game).
   if (p.dying > 0) {
     pendingTouchDX = 0;
+    updateRapid(dt, false); // cools down
     p.dying -= dt;
     if (p.dying <= 0) {
       p.dying = 0;
@@ -416,7 +420,7 @@ function updatePlayer(dt) {
     return; // no control while exploding
   }
 
-  if (p.captured) { pendingTouchDX = 0; return; } // no control while captured
+  if (p.captured) { pendingTouchDX = 0; updateRapid(dt, false); return; } // no control
   if (p.invuln > 0) p.invuln -= dt;
 
   let dir = 0;
@@ -428,8 +432,26 @@ function updatePlayer(dt) {
   const span = playerHalfSpan();
   p.x = clamp(p.x, PLAY_LEFT + span, PLAY_RIGHT - span);
 
+  updateRapid(dt, true);
   p.fireTimer -= dt;
   if (keys[" "] || touchFire) tryFire(); // holding / finger-down = steady autofire
+}
+
+// Spool the rapid meter up while firing, down while idle. Holding (or touch
+// auto-fire) ramps to HOLD_CEILING; rapid tapping pushes past it toward full.
+function updateRapid(dt, controllable) {
+  const p = game.player;
+  const holding = controllable && (keys[" "] || touchFire);
+  const tapping = controllable && p.lastPressAt >= 0 && (game.t - p.lastPressAt) < RAPID_WINDOW;
+  if (tapping) {
+    p.rapid = Math.min(1, p.rapid + TAP_CHARGE * dt);
+  } else if (holding) {
+    p.rapid = p.rapid < HOLD_CEILING
+      ? Math.min(HOLD_CEILING, p.rapid + HOLD_CHARGE * dt)
+      : Math.max(HOLD_CEILING, p.rapid - RAPID_DECAY * dt); // ease extra tap-heat back down
+  } else {
+    p.rapid = Math.max(0, p.rapid - RAPID_DECAY * dt);
+  }
 }
 
 function spawnPlayerShots() {
@@ -446,16 +468,13 @@ function canFire() {
   const cap = (p.dual ? 4 : 2) + Math.round(p.rapid * MAX_BULLET_BONUS);
   return game.bullets.length < cap;
 }
-// Discrete tap. Every press heats the rapid meter — even when the screen is
-// full — so mashing opens the bullet cap and speeds shots up, then fires if a
-// slot is free. The faster you press, the faster/denser your fire.
+// Discrete tap: fire instantly if a slot is free. Recording the press time lets
+// updateRapid recognise sustained fast tapping and spool the meter to full.
 function firePress() {
   if (game.state !== S.PLAYING && game.state !== S.CHALLENGE) return;
   const p = game.player;
   if (p.dying > 0 || p.captured) return;
-  const gap = p.lastPressAt < 0 ? Infinity : game.t - p.lastPressAt;
   p.lastPressAt = game.t;
-  if (gap < RAPID_WINDOW) p.rapid = Math.min(1, p.rapid + RAPID_RISE);
   if (canFire()) { spawnPlayerShots(); p.fireTimer = FIRE_COOLDOWN; }
 }
 // Held: steady autofire at the cooldown cadence (never faster than tapping).
