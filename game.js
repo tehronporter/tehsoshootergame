@@ -64,6 +64,28 @@ const FIRE_COOLDOWN = 0.13;    // s between held-autofire shots (tapping bypasse
 const RESPAWN_INVULN = 1.6;    // s of blink invulnerability after a death
 const PLAYER_DEATH_TIME = 0.95;// s the death explosion plays before respawn
 
+// Touch readability scales the presentation layer up without changing gameplay.
+const UI_SCALE = IS_TOUCH ? 1.18 : 1;
+const HUD_LABEL_FONT = IS_TOUCH ? 14 : 12;
+const HUD_VALUE_FONT = IS_TOUCH ? 16 : 12;
+const HUD_META_FONT = IS_TOUCH ? 13 : 11;
+const OVERLAY_TITLE_FONT = IS_TOUCH ? 40 : 36;
+const OVERLAY_SUB_FONT = IS_TOUCH ? 15 : 13;
+const OVERLAY_HELP_FONT = IS_TOUCH ? 14 : 12;
+const OVERLAY_SCORE_FONT = IS_TOUCH ? 16 : 14;
+const BUTTON_FONT = IS_TOUCH ? 18 : 16;
+const BUTTON_H = IS_TOUCH ? 56 : 48;
+const BUTTON_PAD_X = IS_TOUCH ? 34 : 30;
+const CONTROL_HINT_FONT = IS_TOUCH ? 12 : 10;
+const CONTROL_HANDLE_W = IS_TOUCH ? 34 : 26;
+const CONTROL_HANDLE_H = IS_TOUCH ? 16 : 12;
+const CONTROL_CENTER_SIZE = IS_TOUCH ? 10 : 8;
+const SHIP_ICON_SCALE = IS_TOUCH ? 1.18 : 1;
+const SHIP_ICON_STEP = IS_TOUCH ? 24 : 20;
+const STAGE_FLAG_W = IS_TOUCH ? 10 : 8;
+const STAGE_FLAG_H = IS_TOUCH ? 7 : 6;
+const STAGE_FLAG_STEP = IS_TOUCH ? 13 : 11;
+
 // Player bullets
 const BULLET_SPEED = 500;      // base speed
 const BULLET_W = 2;
@@ -335,15 +357,13 @@ async function requestWakeLock() {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && game && game.state !== S.START) requestWakeLock();
 });
-const BTN_H = 48;
-const BTN_PAD_X = 30;         // horizontal breathing room around the label
 function buttonLabel() {
   if (game.state === S.START) return touchUI ? "TAP TO START" : "START";
   return touchUI ? "TAP TO RESTART" : "RESTART";
 }
 // Button sized to its label so text never crowds the border.
 function buttonRect() {
-  ctx.font = `16px ${FONT}`;
+  ctx.font = `${BUTTON_FONT}px ${FONT}`;
   const w = Math.ceil(ctx.measureText(buttonLabel()).width) + BTN_PAD_X * 2;
   return { x: W / 2 - w / 2, y: H / 2 + 46, w, h: BTN_H };
 }
@@ -1133,12 +1153,14 @@ function drawParticles() {
   }
 }
 
-function drawShipGlyph(cx, baseY, color) {
+function drawShipGlyph(cx, baseY, color, scale = 1) {
+  const w = PLAYER_W * scale;
+  const h = PLAYER_H * scale;
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(cx, baseY - PLAYER_H);
-  ctx.lineTo(cx - PLAYER_W / 2, baseY);
-  ctx.lineTo(cx + PLAYER_W / 2, baseY);
+  ctx.moveTo(cx, baseY - h);
+  ctx.lineTo(cx - w / 2, baseY);
+  ctx.lineTo(cx + w / 2, baseY);
   ctx.closePath();
   ctx.fill();
 }
@@ -1178,7 +1200,7 @@ function drawControlBar() {
   // "SLIDE TO MOVE" hint above the bar for the first stage only.
   if (game.stage <= 1) {
     ctx.fillStyle = active ? COLOR.dim : COLOR.faint;
-    ctx.font = `10px ${FONT}`;
+    ctx.font = `${CONTROL_HINT_FONT}px ${FONT}`;
     ctx.textBaseline = "bottom";
     ctx.fillText("SLIDE TO MOVE", (x0 + x1) / 2, BAR_Y - 5);
   }
@@ -1187,34 +1209,37 @@ function drawControlBar() {
   const span = playerHalfSpan();
   const t = (game.player.x - (PLAY_LEFT + span)) / ((PLAY_RIGHT - span) - (PLAY_LEFT + span));
   const hx = x0 + clamp(t, 0, 1) * w;
-  const hw = 26;
-  const hh = 12;
+  const hw = CONTROL_HANDLE_W;
+  const hh = CONTROL_HANDLE_H;
   ctx.strokeStyle = active ? COLOR.white : COLOR.dim;
   ctx.strokeRect(hx - hw / 2, cy - hh / 2, hw, hh);
   if (active) {
     ctx.fillStyle = COLOR.white;
-    ctx.fillRect(hx - 4, cy - 4, 8, 8);
+    ctx.fillRect(hx - CONTROL_CENTER_SIZE / 2, cy - CONTROL_CENTER_SIZE / 2, CONTROL_CENTER_SIZE, CONTROL_CENTER_SIZE);
   } else {
     ctx.fillStyle = COLOR.dim;
-    ctx.fillRect(hx - 1, cy - 5, 2, 10);
+    ctx.fillRect(hx - 1, cy - Math.round(hh * 0.42), 2, Math.round(hh * 0.84));
   }
 }
 
 function drawHUD() {
   ctx.textBaseline = "top";
-  ctx.font = `12px ${FONT}`;
 
   // 1UP + score (left), HIGH SCORE (right) — Galaga style.
   ctx.textAlign = "left";
   ctx.fillStyle = COLOR.white;
+  ctx.font = `${HUD_LABEL_FONT}px ${FONT}`;
   ctx.fillText("1UP", MARGIN, 8);
   ctx.fillStyle = COLOR.dim;
+  ctx.font = `${HUD_VALUE_FONT}px ${FONT}`;
   ctx.fillText(pad(game.score, 6), MARGIN, 22);
 
   ctx.textAlign = "right";
   ctx.fillStyle = COLOR.white;
+  ctx.font = `${HUD_LABEL_FONT}px ${FONT}`;
   ctx.fillText("HIGH SCORE", W - MARGIN, 8);
   ctx.fillStyle = COLOR.dim;
+  ctx.font = `${HUD_VALUE_FONT}px ${FONT}`;
   ctx.fillText(pad(Math.max(highScore, game.score), 6), W - MARGIN, 22);
 
   if (game.state === S.START || game.state === S.GAME_OVER) return;
@@ -1235,12 +1260,12 @@ function drawHUD() {
 function drawReserveShips(baseY) {
   const reserve = Math.max(0, game.lives - 1);
   const shown = Math.min(reserve, MAX_SHIP_ICONS);
-  for (let i = 0; i < shown; i++) drawShipGlyph(MARGIN + 8 + i * 20, baseY, COLOR.white);
+  for (let i = 0; i < shown; i++) drawShipGlyph(MARGIN + 8 + i * SHIP_ICON_STEP, baseY, COLOR.white, SHIP_ICON_SCALE);
   if (reserve > shown) {
     ctx.fillStyle = COLOR.dim;
-    ctx.font = `12px ${FONT}`;
+    ctx.font = `${HUD_LABEL_FONT}px ${FONT}`;
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-    ctx.fillText("+" + (reserve - shown), MARGIN + 8 + shown * 20, baseY + 2);
+    ctx.fillText("+" + (reserve - shown), MARGIN + 8 + shown * SHIP_ICON_STEP, baseY + 2);
   }
 }
 
@@ -1253,18 +1278,18 @@ function drawStageBadge(flagY) {
   let drawn = 0;
   for (const d of denoms) {
     while (n >= d && drawn < 12) {
-      n -= d; drawn++; x -= 11;
+      n -= d; drawn++; x -= STAGE_FLAG_STEP;
       ctx.fillStyle = d >= 10 ? COLOR.white : COLOR.dim;
       ctx.beginPath();
       ctx.moveTo(x, flagY);
-      ctx.lineTo(x + 8, flagY + 3);
-      ctx.lineTo(x, flagY + 6);
+      ctx.lineTo(x + STAGE_FLAG_W, flagY + Math.round(STAGE_FLAG_H * 0.43));
+      ctx.lineTo(x, flagY + STAGE_FLAG_H);
       ctx.closePath();
       ctx.fill();
     }
   }
   ctx.textAlign = "right"; ctx.textBaseline = "bottom";
-  ctx.fillStyle = COLOR.dim; ctx.font = `11px ${FONT}`;
+  ctx.fillStyle = COLOR.dim; ctx.font = `${HUD_META_FONT}px ${FONT}`;
   ctx.fillText("STAGE " + pad(game.stage, 2), W - MARGIN, flagY - 3);
 }
 
@@ -1287,26 +1312,26 @@ function drawButton() {
   const b = buttonRect();
   ctx.strokeStyle = COLOR.white; ctx.lineWidth = 1;
   ctx.strokeRect(b.x, b.y, b.w, b.h);
-  ctx.fillStyle = COLOR.white; ctx.font = `16px ${FONT}`;
+  ctx.fillStyle = COLOR.white; ctx.font = `${BUTTON_FONT}px ${FONT}`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(buttonLabel(), W / 2, b.y + b.h / 2);
 }
 
 function drawStart() {
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillStyle = COLOR.white; ctx.font = `36px ${FONT}`;
+  ctx.fillStyle = COLOR.white; ctx.font = `${OVERLAY_TITLE_FONT}px ${FONT}`;
   ctx.fillText("SHAPE SHOOTER", W / 2, H / 2 - 110);
-  ctx.fillStyle = COLOR.dim; ctx.font = `13px ${FONT}`;
+  ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_SUB_FONT}px ${FONT}`;
   ctx.fillText("A MINIMAL SHOOTER GAME", W / 2, H / 2 - 76);
 
   // tiny legend of the enemy tiers
-  ctx.font = `14px ${FONT}`;
+  ctx.font = `${Math.round(14 * UI_SCALE)}px ${FONT}`;
   ctx.fillStyle = COLOR.dim;
   ctx.fillText("◈  ✦  ✧", W / 2, H / 2 - 40);
 
   drawButton();
 
-  ctx.fillStyle = COLOR.dim; ctx.font = `12px ${FONT}`;
+  ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_HELP_FONT}px ${FONT}`;
   if (touchUI) {
     ctx.fillText("DRAG TO MOVE AND DODGE", W / 2, H / 2 + 122);
     ctx.fillText("THE SHIP FIRES BY ITSELF", W / 2, H / 2 + 142);
@@ -1318,9 +1343,9 @@ function drawStart() {
 
 function drawGameOver() {
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillStyle = COLOR.white; ctx.font = `34px ${FONT}`;
+  ctx.fillStyle = COLOR.white; ctx.font = `${Math.round(34 * UI_SCALE)}px ${FONT}`;
   ctx.fillText("GAME OVER", W / 2, H / 2 - 96);
-  ctx.fillStyle = COLOR.dim; ctx.font = `14px ${FONT}`;
+  ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_SCORE_FONT}px ${FONT}`;
   ctx.fillText("SCORE: " + pad(game.score, 6), W / 2, H / 2 - 44);
   ctx.fillText("STAGE: " + pad(game.stage, 2), W / 2, H / 2 - 22);
   if (game.score >= highScore) {
@@ -1328,7 +1353,7 @@ function drawGameOver() {
     ctx.fillText("NEW HIGH SCORE", W / 2, H / 2 + 4);
   }
   drawButton();
-  ctx.fillStyle = COLOR.dim; ctx.font = `12px ${FONT}`;
+  ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_HELP_FONT}px ${FONT}`;
   ctx.fillText(touchUI ? "TAP ANYWHERE TO RESTART" : "PRESS R TO RESTART", W / 2, H / 2 + 122);
 }
 
