@@ -53,13 +53,13 @@ const PLAY_RIGHT = W - MARGIN;
 const PLAYER_W = 16;
 const PLAYER_H = 14;
 const PLAYER_SPEED = 250;
-const PLAYER_Y = H - 92;
+const PLAYER_Y = H - (IS_TOUCH ? 110 : 92);
 const DUAL_GAP = 9;            // half-distance between the two dual ships
 
 // Mobile control bar (touch slide zone), sits well below the ship.
 const BAR_PAD = 12;           // inset from the play edges
-const BAR_H = 26;             // track height
-const BAR_Y = H - 54;         // track top (lifted off the bottom border)
+const BAR_H = IS_TOUCH ? 24 : 26; // track height
+const BAR_Y = H - (IS_TOUCH ? 46 : 54); // track top (lifted off the bottom border)
 const FIRE_COOLDOWN = 0.13;    // s between held-autofire shots (tapping bypasses this)
 const RESPAWN_INVULN = 1.6;    // s of blink invulnerability after a death
 const PLAYER_DEATH_TIME = 0.95;// s the death explosion plays before respawn
@@ -1157,33 +1157,47 @@ function drawFreedShip() {
 function drawControlBar() {
   const x0 = PLAY_LEFT + BAR_PAD, x1 = PLAY_RIGHT - BAR_PAD;
   const w = x1 - x0, cy = BAR_Y + BAR_H / 2;
+  const active = touchFire || activeTouchId !== null;
 
-  ctx.strokeStyle = COLOR.faint;
+  // A thin movement lane keeps the retro feel without a heavy UI block.
+  ctx.strokeStyle = active ? COLOR.dim : COLOR.faint;
   ctx.lineWidth = 1;
-  ctx.strokeRect(x0, BAR_Y, w, BAR_H);
+  ctx.beginPath();
+  ctx.moveTo(x0, cy);
+  ctx.lineTo(x1, cy);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x0, cy - 5);
+  ctx.lineTo(x0, cy + 5);
+  ctx.moveTo(x1, cy - 5);
+  ctx.lineTo(x1, cy + 5);
+  ctx.stroke();
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = COLOR.dim;
-  ctx.font = `14px ${FONT}`;
-  ctx.fillText("◄", x0 + 14, cy);
-  ctx.fillText("►", x1 - 14, cy);
-
-  // "SLIDE TO MOVE" hint above the bar for the first few stages.
-  if (game.stage <= 2) {
-    ctx.fillStyle = COLOR.faint;
+  // "SLIDE TO MOVE" hint above the bar for the first stage only.
+  if (game.stage <= 1) {
+    ctx.fillStyle = active ? COLOR.dim : COLOR.faint;
     ctx.font = `10px ${FONT}`;
     ctx.textBaseline = "bottom";
     ctx.fillText("SLIDE TO MOVE", (x0 + x1) / 2, BAR_Y - 5);
   }
 
-  // Handle at the ship's position along the track — the bright thing to grab.
+  // A lighter handle reduces visual noise at rest, then brightens on touch.
   const span = playerHalfSpan();
   const t = (game.player.x - (PLAY_LEFT + span)) / ((PLAY_RIGHT - span) - (PLAY_LEFT + span));
   const hx = x0 + clamp(t, 0, 1) * w;
-  const hw = 40;
-  ctx.fillStyle = COLOR.white;
-  ctx.fillRect(hx - hw / 2, BAR_Y + 4, hw, BAR_H - 8);
+  const hw = 26;
+  const hh = 12;
+  ctx.strokeStyle = active ? COLOR.white : COLOR.dim;
+  ctx.strokeRect(hx - hw / 2, cy - hh / 2, hw, hh);
+  if (active) {
+    ctx.fillStyle = COLOR.white;
+    ctx.fillRect(hx - 4, cy - 4, 8, 8);
+  } else {
+    ctx.fillStyle = COLOR.dim;
+    ctx.fillRect(hx - 1, cy - 5, 2, 10);
+  }
 }
 
 function drawHUD() {
