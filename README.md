@@ -22,12 +22,14 @@ It's a static site with no build step, so it deploys as-is to any static host
 **Desktop**
 - Move: `A` / `D` or `←` / `→`
 - Fire: `Space` (tap fast to fire faster; hold for steady autofire)
+- Pause / resume: `P` or `Esc`
 - Restart: `R`
 
 **Mobile / touch**
 - Drag anywhere to move (the ship tracks your finger)
-- Hold to fire
+- Firing is automatic during play
 - Tap to start / restart
+- The game pauses after switching away; tap to resume
 
 ## Gameplay
 

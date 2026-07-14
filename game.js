@@ -167,6 +167,7 @@ const S = {
   START: "START",
   PLAYING: "PLAYING",
   CHALLENGE: "CHALLENGE",
+  PAUSED: "PAUSED",
   GAME_OVER: "GAME_OVER",
 };
 
@@ -223,6 +224,7 @@ function saveHigh() {
 function newGame() {
   return {
     state: S.START,
+    pausedFrom: null,
     score: 0,
     stage: 0,               // becomes 1 on first startStage()
     lives: 3,               // total ships incl. the one in play
@@ -272,10 +274,16 @@ window.addEventListener("keydown", (e) => {
   keys[k] = true;
   if (k === " ") {
     if (game.state === S.START) startGame();
+    else if (game.state === S.PAUSED) resumeGame();
     else if (!spaceHeld) { spaceHeld = true; firePress(); } // each tap = an instant shot
   }
   if (k === "enter" && game.state === S.START) startGame();
+  else if (k === "enter" && game.state === S.PAUSED) resumeGame();
   if (k === "r" && game.state === S.GAME_OVER) restartGame();
+  if ((k === "p" || k === "escape") && !e.repeat) {
+    if (game.state === S.PAUSED) resumeGame();
+    else pauseGame();
+  }
 });
 window.addEventListener("keyup", (e) => {
   const k = e.key.toLowerCase();
@@ -287,8 +295,10 @@ canvas.addEventListener("click", (e) => {
   const r = canvas.getBoundingClientRect();
   const mx = (e.clientX - r.left) * (W / r.width);
   const my = (e.clientY - r.top) * (H / r.height);
-  if ((game.state === S.START || game.state === S.GAME_OVER) && pointInButton(mx, my)) {
-    game.state === S.START ? startGame() : restartGame();
+  if ((game.state === S.START || game.state === S.PAUSED || game.state === S.GAME_OVER) && pointInButton(mx, my)) {
+    if (game.state === S.START) startGame();
+    else if (game.state === S.PAUSED) resumeGame();
+    else restartGame();
   }
 });
 
@@ -318,6 +328,7 @@ canvas.addEventListener("touchstart", (e) => {
   requestWakeLock();
   const t = e.changedTouches[0];
   if (game.state === S.START) { startGame(); return; }
+  if (game.state === S.PAUSED) { resumeGame(); return; }
   if (game.state === S.GAME_OVER) { restartGame(); return; }
   activeTouchId = t.identifier;
   touchTargetX = touchToShipX(t.clientX);
@@ -355,10 +366,13 @@ async function requestWakeLock() {
   } catch (e) { /* denied or unsupported — ignore */ }
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && game && game.state !== S.START) requestWakeLock();
+  if (!game) return;
+  if (document.visibilityState === "hidden") pauseGame();
+  else if (game.state !== S.START) requestWakeLock();
 });
 function buttonLabel() {
   if (game.state === S.START) return touchUI ? "TAP TO START" : "START";
+  if (game.state === S.PAUSED) return touchUI ? "TAP TO RESUME" : "RESUME";
   return touchUI ? "TAP TO RESTART" : "RESTART";
 }
 
@@ -387,8 +401,8 @@ function overlayLayout() {
 function buttonRect() {
   const layout = overlayLayout();
   ctx.font = `${BUTTON_FONT}px ${FONT}`;
-  const w = Math.ceil(ctx.measureText(buttonLabel()).width) + BTN_PAD_X * 2;
-  return { x: W / 2 - w / 2, y: layout.buttonY, w, h: BTN_H };
+  const w = Math.ceil(ctx.measureText(buttonLabel()).width) + BUTTON_PAD_X * 2;
+  return { x: W / 2 - w / 2, y: layout.buttonY, w, h: BUTTON_H };
 }
 function pointInButton(mx, my) {
   const b = buttonRect();
@@ -1065,7 +1079,7 @@ function draw() {
   ctx.save();
   ctx.translate(ox, oy);
 
-  if (game.state === S.PLAYING || game.state === S.CHALLENGE) {
+  if (game.state === S.PLAYING || game.state === S.CHALLENGE || game.state === S.PAUSED) {
     drawEnemies();
     drawBeams();
     drawBullets();
@@ -1081,6 +1095,7 @@ function draw() {
   if (game.extendFlash > 0) drawExtendFlash();
 
   if (game.state === S.START) drawStart();
+  else if (game.state === S.PAUSED) drawPaused();
   else if (game.state === S.GAME_OVER) drawGameOver();
   else if (game.banner) drawBanner();
 }
@@ -1361,8 +1376,8 @@ function drawStart() {
 
   ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_HELP_FONT}px ${FONT}`;
   if (touchUI) {
-    ctx.fillText("TAP ANYWHERE TO START", W / 2, layout.help1Y);
-    ctx.fillText("DRAG TO MOVE AND DODGE", W / 2, layout.help2Y);
+    ctx.fillText("DRAG BELOW YOUR SHIP TO MOVE", W / 2, layout.help1Y);
+    ctx.fillText("AUTO-FIRE IS ALWAYS ON", W / 2, layout.help2Y);
   } else {
     ctx.fillText("MOVE: A / D  OR  ARROWS", W / 2, layout.help1Y);
     ctx.fillText("FIRE: SPACE", W / 2, layout.help2Y);
@@ -1384,6 +1399,21 @@ function drawGameOver() {
   drawButton();
   ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_HELP_FONT}px ${FONT}`;
   ctx.fillText(touchUI ? "TAP ANYWHERE TO RESTART" : "PRESS R TO RESTART", W / 2, layout.help1Y);
+}
+
+function drawPaused() {
+  const layout = overlayLayout();
+  ctx.fillStyle = "rgba(0,47,167,0.88)";
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = COLOR.white; ctx.font = `${Math.round(34 * UI_SCALE)}px ${FONT}`;
+  ctx.fillText("PAUSED", W / 2, layout.titleY);
+  ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_SCORE_FONT}px ${FONT}`;
+  ctx.fillText("SCORE: " + pad(game.score, 6), W / 2, layout.subtitleY);
+  ctx.fillText("STAGE: " + pad(game.stage, 2), W / 2, layout.legendY - 4);
+  drawButton();
+  ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_HELP_FONT}px ${FONT}`;
+  ctx.fillText(touchUI ? "TAP ANYWHERE TO CONTINUE" : "PRESS P OR ESC TO CONTINUE", W / 2, layout.help1Y);
 }
 
 /* ---------- 15. GAME LOOP ---------- */
@@ -1425,6 +1455,20 @@ function startGame() {
   startStage(); // stage 1: sets state + fly-in entrances (_launchBase set inside)
 }
 function restartGame() { startGame(); }
+function pauseGame() {
+  if (!game || (game.state !== S.PLAYING && game.state !== S.CHALLENGE)) return;
+  game.pausedFrom = game.state;
+  game.state = S.PAUSED;
+  touchFire = false; activeTouchId = null; touchTargetX = null;
+  spaceHeld = false;
+  for (const key of Object.keys(keys)) keys[key] = false;
+}
+function resumeGame() {
+  if (game.state !== S.PAUSED) return;
+  game.state = game.pausedFrom === S.CHALLENGE ? S.CHALLENGE : S.PLAYING;
+  game.pausedFrom = null;
+  requestWakeLock();
+}
 function gameOver() {
   if (game.score >= highScore) { highScore = game.score; saveHigh(); }
   game.state = S.GAME_OVER;
