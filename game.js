@@ -361,11 +361,34 @@ function buttonLabel() {
   if (game.state === S.START) return touchUI ? "TAP TO START" : "START";
   return touchUI ? "TAP TO RESTART" : "RESTART";
 }
+
+function overlayLayout() {
+  if (touchUI) {
+    return {
+      titleY: Math.round(H * 0.40),
+      subtitleY: Math.round(H * 0.44),
+      legendY: Math.round(H * 0.49),
+      buttonY: Math.round(H * 0.54),
+      help1Y: Math.round(H * 0.63),
+      help2Y: Math.round(H * 0.665),
+    };
+  }
+  return {
+    titleY: H / 2 - 110,
+    subtitleY: H / 2 - 76,
+    legendY: H / 2 - 40,
+    buttonY: H / 2 + 46,
+    help1Y: H / 2 + 122,
+    help2Y: H / 2 + 142,
+  };
+}
+
 // Button sized to its label so text never crowds the border.
 function buttonRect() {
+  const layout = overlayLayout();
   ctx.font = `${BUTTON_FONT}px ${FONT}`;
   const w = Math.ceil(ctx.measureText(buttonLabel()).width) + BTN_PAD_X * 2;
-  return { x: W / 2 - w / 2, y: H / 2 + 46, w, h: BTN_H };
+  return { x: W / 2 - w / 2, y: layout.buttonY, w, h: BTN_H };
 }
 function pointInButton(mx, my) {
   const b = buttonRect();
@@ -1310,7 +1333,11 @@ function drawBanner() {
 
 function drawButton() {
   const b = buttonRect();
-  ctx.strokeStyle = COLOR.white; ctx.lineWidth = 1;
+  ctx.strokeStyle = COLOR.white; ctx.lineWidth = touchUI ? 2 : 1;
+  if (touchUI) {
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+  }
   ctx.strokeRect(b.x, b.y, b.w, b.h);
   ctx.fillStyle = COLOR.white; ctx.font = `${BUTTON_FONT}px ${FONT}`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1318,43 +1345,45 @@ function drawButton() {
 }
 
 function drawStart() {
+  const layout = overlayLayout();
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillStyle = COLOR.white; ctx.font = `${OVERLAY_TITLE_FONT}px ${FONT}`;
-  ctx.fillText("SHAPE SHOOTER", W / 2, H / 2 - 110);
+  ctx.fillText("SHAPE SHOOTER", W / 2, layout.titleY);
   ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_SUB_FONT}px ${FONT}`;
-  ctx.fillText("A MINIMAL SHOOTER GAME", W / 2, H / 2 - 76);
+  ctx.fillText("A MINIMAL SHOOTER GAME", W / 2, layout.subtitleY);
 
   // tiny legend of the enemy tiers
   ctx.font = `${Math.round(14 * UI_SCALE)}px ${FONT}`;
   ctx.fillStyle = COLOR.dim;
-  ctx.fillText("◈  ✦  ✧", W / 2, H / 2 - 40);
+  ctx.fillText("◈  ✦  ✧", W / 2, layout.legendY);
 
   drawButton();
 
   ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_HELP_FONT}px ${FONT}`;
   if (touchUI) {
-    ctx.fillText("DRAG TO MOVE AND DODGE", W / 2, H / 2 + 122);
-    ctx.fillText("THE SHIP FIRES BY ITSELF", W / 2, H / 2 + 142);
+    ctx.fillText("TAP ANYWHERE TO START", W / 2, layout.help1Y);
+    ctx.fillText("DRAG TO MOVE AND DODGE", W / 2, layout.help2Y);
   } else {
-    ctx.fillText("MOVE: A / D  OR  ARROWS", W / 2, H / 2 + 122);
-    ctx.fillText("FIRE: SPACE", W / 2, H / 2 + 142);
+    ctx.fillText("MOVE: A / D  OR  ARROWS", W / 2, layout.help1Y);
+    ctx.fillText("FIRE: SPACE", W / 2, layout.help2Y);
   }
 }
 
 function drawGameOver() {
+  const layout = overlayLayout();
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillStyle = COLOR.white; ctx.font = `${Math.round(34 * UI_SCALE)}px ${FONT}`;
-  ctx.fillText("GAME OVER", W / 2, H / 2 - 96);
+  ctx.fillText("GAME OVER", W / 2, layout.titleY);
   ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_SCORE_FONT}px ${FONT}`;
-  ctx.fillText("SCORE: " + pad(game.score, 6), W / 2, H / 2 - 44);
-  ctx.fillText("STAGE: " + pad(game.stage, 2), W / 2, H / 2 - 22);
+  ctx.fillText("SCORE: " + pad(game.score, 6), W / 2, layout.subtitleY);
+  ctx.fillText("STAGE: " + pad(game.stage, 2), W / 2, layout.legendY - 4);
   if (game.score >= highScore) {
     ctx.fillStyle = COLOR.white;
-    ctx.fillText("NEW HIGH SCORE", W / 2, H / 2 + 4);
+    ctx.fillText("NEW HIGH SCORE", W / 2, layout.legendY + 22);
   }
   drawButton();
   ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_HELP_FONT}px ${FONT}`;
-  ctx.fillText(touchUI ? "TAP ANYWHERE TO RESTART" : "PRESS R TO RESTART", W / 2, H / 2 + 122);
+  ctx.fillText(touchUI ? "TAP ANYWHERE TO RESTART" : "PRESS R TO RESTART", W / 2, layout.help1Y);
 }
 
 /* ---------- 15. GAME LOOP ---------- */
