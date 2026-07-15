@@ -118,13 +118,12 @@ const BASE_SWAY_FREQ = 0.7;    // rad/s, grows slightly per stage
 const BREATH_FREQ = 1.1;
 const BREATH_AMT = 0.06;       // formation expand/contract
 
-// Enemy tiers (all white; distinguished by shape + a boss box)
+// Enemy tiers share gameplay rules but each has two canvas-drawn silhouettes.
 const TIER = {
-  boss: { glyph: "◈", hp: 2, form: 150, dive: 400, size: 20 },
-  goei: { glyph: "✦", hp: 1, form: 80,  dive: 160, size: 18 },
-  zako: { glyph: "✧", hp: 1, form: 50,  dive: 100, size: 17 },
+  boss:  { variants: ["citadel", "crown"], hp: 2, form: 150, dive: 400, size: 28, hitRadius: 16 },
+  goei:  { variants: ["starwing", "splitwing"], hp: 1, form: 80, dive: 160, size: 25, hitRadius: 14.5 },
+  zako:  { variants: ["needle", "fork"], hp: 1, form: 50, dive: 100, size: 23, hitRadius: 13.5 },
 };
-const HIT_R = 11;              // enemy hit radius (roughly ENEMY_SIZE/2 + slack)
 
 // Attacks
 const DIVE_TELEGRAPH = 0.4;    // s pulse before peeling off
@@ -413,11 +412,11 @@ function pointInButton(mx, my) {
 // Each stage's formation rows, top to bottom (Galaga: bosses on top,
 // butterflies in the middle, bees at the bottom).
 const ROWS = [
-  { tier: "boss", cols: [2, 3, 4, 5] },
-  { tier: "goei", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
-  { tier: "goei", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
-  { tier: "zako", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
-  { tier: "zako", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
+  { tier: "boss", variants: ["citadel", "crown"], cols: [2, 3, 4, 5] },
+  { tier: "goei", variant: "starwing", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
+  { tier: "goei", variant: "splitwing", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
+  { tier: "zako", variant: "needle", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
+  { tier: "zako", variant: "fork", cols: [0, 1, 2, 3, 4, 5, 6, 7] },
 ];
 
 function slotColOffset(col) { return (col - (COLS - 1) / 2) * COL_SPACING; }
@@ -433,10 +432,10 @@ function slotTarget(e) {
   };
 }
 
-function makeEnemy(tier, rowIndex, col, idx) {
+function makeEnemy(tier, variant, rowIndex, col, idx) {
   const d = TIER[tier];
   return {
-    tier, glyph: d.glyph, size: d.size,
+    tier, variant, size: d.size, hitRadius: d.hitRadius,
     hp: d.hp, maxHp: d.hp,
     pointsForm: d.form, pointsDive: d.dive,
     rowIndex, col, slotOff: slotColOffset(col),
@@ -447,6 +446,7 @@ function makeEnemy(tier, rowIndex, col, idx) {
     diveT: 0, diveCenterX: 0, swoopDir: 1, fireTimer: 0,
     telegraph: 0,
     hitFlash: 0,
+    animPhase: idx * 0.73,
     carrying: false,        // boss holding a captured ship
     // capture sortie fields
     capPhase: null, capT: 0, beamOn: false,
@@ -477,7 +477,8 @@ function startStage() {
   let idx = 0;
   ROWS.forEach((row, rowIndex) => {
     row.cols.forEach((col) => {
-      const e = makeEnemy(row.tier, rowIndex, col, idx++);
+      const variant = row.variant || row.variants[col % row.variants.length];
+      const e = makeEnemy(row.tier, variant, rowIndex, col, idx++);
       assignEntrancePath(e);
       e._launchBase = game.t; // entrances stagger from now
       game.enemies.push(e);
@@ -909,7 +910,7 @@ function updateChallenge(dt) {
   for (const b of game.bullets) {
     for (const e of game.enemies) {
       if (!e.alive) continue;
-      if (Math.hypot(b.x - e.x, b.y - e.y) < HIT_R) {
+      if (Math.hypot(b.x - e.x, b.y - e.y) < e.hitRadius) {
         e.alive = false; b.dead = true; c.hits += 1;
         game.score += e.pointsDive;
         spawnBurst(e.x, e.y, 8);
@@ -947,13 +948,13 @@ function launchChallengeFlight() {
     const tier = pick(["goei", "zako", "zako"]);
     const d = TIER[tier];
     game.enemies.push({
-      tier, glyph: d.glyph, size: d.size, hp: 1, maxHp: 1,
+      tier, variant: pick(d.variants), size: d.size, hitRadius: d.hitRadius, hp: 1, maxHp: 1,
       pointsForm: d.form, pointsDive: d.dive,
       x: path[0].x, y: path[0].y,
       state: "challenge", started: false,
       _launchBase: base, launchAt: i * 0.18,
       path, pathT: 0, pathDur: rand(3.0, 3.8),
-      hitFlash: 0, alive: true,
+      hitFlash: 0, animPhase: rand(0, 4), alive: true,
     });
   }
   game.ch.spawned += CHALLENGE_PER_FLIGHT;
@@ -968,7 +969,7 @@ function handleCollisions() {
     for (const e of game.enemies) {
       if (!e.alive) continue;
       if (!e.started && e.state === "entering") continue;
-      if (Math.hypot(b.x + BULLET_W / 2 - e.x, b.y - e.y) < HIT_R + e.size * 0.15) {
+      if (Math.hypot(b.x + BULLET_W / 2 - e.x, b.y - e.y) < e.hitRadius) {
         b.dead = true;
         e.hp -= 1;
         if (e.hp > 0) { e.hitFlash = 0.12; spawnBurst(e.x, e.y, 4); }
@@ -998,7 +999,7 @@ function handleCollisions() {
       if (!e.alive) continue;
       if (e.state !== "diving" && e.state !== "capture" && e.state !== "returning") continue;
       for (const cx of shipXs()) {
-        if (Math.hypot(e.x - cx, e.y - PLAYER_Y) < HIT_R + PLAYER_W / 2) {
+        if (Math.hypot(e.x - cx, e.y - PLAYER_Y) < e.hitRadius + PLAYER_W / 2) {
           killEnemy(e); playerHit(); break;
         }
       }
@@ -1117,9 +1118,106 @@ function drawStars() {
   }
 }
 
+function fillPolygon(points) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function strokePolygon(points) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawDiamond(rx, ry, filled = true) {
+  const points = [[0, -ry], [rx, 0], [0, ry], [-rx, 0]];
+  if (filled) fillPolygon(points);
+  else strokePolygon(points);
+}
+
+// Six geometric characters share one normalized 28px drawing space. Keeping
+// them as canvas paths makes their silhouettes stable across iOS font stacks.
+function drawEnemyGlyph(e, color, staticPose = false) {
+  const scale = e.size / 28;
+  const pulse = staticPose || !game ? 0.75 : ((Math.floor(game.t * 4 + e.animPhase) & 1) ? 1.5 : 0);
+  let bank = 0;
+  if (!staticPose) {
+    if (e.state === "diving") bank = Math.sin(e.diveT * SWOOP_FREQ) * 0.18 * e.swoopDir;
+    else if (e.state === "challenge") bank = Math.sin(e.pathT * Math.PI * 4) * 0.16;
+    else if (e.state === "entering") bank = Math.sin(e.pathT * Math.PI * 2) * 0.12;
+    else if (e.state === "returning") bank = Math.sin(game.t * 3 + e.animPhase) * 0.08;
+  }
+
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(bank);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 / scale;
+  ctx.lineJoin = "miter";
+  ctx.lineCap = "square";
+
+  if (e.variant === "citadel") {
+    fillPolygon([[-3, -5], [-9, -10], [-12.5 - pulse, -7], [-10, 0], [-12.5 - pulse, 6], [-5, 5]]);
+    fillPolygon([[3, -5], [9, -10], [12.5 + pulse, -7], [10, 0], [12.5 + pulse, 6], [5, 5]]);
+    drawDiamond(5, 10);
+    ctx.fillRect(-7, -2, 14, 4);
+    if (e.maxHp > 1 && e.hp > 1) {
+      ctx.beginPath();
+      ctx.moveTo(-14, -5); ctx.lineTo(-14, -11); ctx.lineTo(-7, -11);
+      ctx.moveTo(14, -5); ctx.lineTo(14, -11); ctx.lineTo(7, -11);
+      ctx.moveTo(-14, 5); ctx.lineTo(-14, 11); ctx.lineTo(-7, 11);
+      ctx.moveTo(14, 5); ctx.lineTo(14, 11); ctx.lineTo(7, 11);
+      ctx.stroke();
+    }
+  } else if (e.variant === "crown") {
+    fillPolygon([
+      [-12.5 - pulse, 6], [-12, -6], [-7, -2], [-5, -10], [0, -5],
+      [5, -10], [7, -2], [12, -6], [12.5 + pulse, 6], [6, 4], [0, 11], [-6, 4],
+    ]);
+    drawDiamond(3.5, 5, false);
+    if (e.maxHp > 1 && e.hp > 1) {
+      strokePolygon([[0, -13], [13, -8], [12, 9], [0, 13], [-12, 9], [-13, -8]]);
+    }
+  } else if (e.variant === "starwing") {
+    fillPolygon([
+      [0, -12], [4, -4], [12.5 + pulse, -7], [9, 0], [12.5 + pulse, 7], [4, 4],
+      [0, 12], [-4, 4], [-12.5 - pulse, 7], [-9, 0], [-12.5 - pulse, -7], [-4, -4],
+    ]);
+    drawDiamond(3, 4, false);
+  } else if (e.variant === "splitwing") {
+    fillPolygon([[-3, -3], [-8, -9], [-12.5 - pulse, -7], [-10, 1], [-12.5 - pulse, 7], [-4, 4]]);
+    fillPolygon([[3, -3], [8, -9], [12.5 + pulse, -7], [10, 1], [12.5 + pulse, 7], [4, 4]]);
+    drawDiamond(4.5, 11);
+    ctx.beginPath();
+    ctx.moveTo(-11 - pulse, -5); ctx.lineTo(-7, 3);
+    ctx.moveTo(11 + pulse, -5); ctx.lineTo(7, 3);
+    ctx.stroke();
+  } else if (e.variant === "needle") {
+    fillPolygon([[0, -12], [4, -3], [11 + pulse, -2], [7, 2], [3, 3], [0, 12], [-3, 3], [-7, 2], [-11 - pulse, -2], [-4, -3]]);
+    ctx.fillStyle = COLOR.klein;
+    drawDiamond(1.5, 4);
+  } else {
+    ctx.lineWidth = 2 / scale;
+    ctx.beginPath();
+    ctx.moveTo(-12 - pulse, -8); ctx.lineTo(-6, -1); ctx.lineTo(-9, 7);
+    ctx.moveTo(12 + pulse, -8); ctx.lineTo(6, -1); ctx.lineTo(9, 7);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    drawDiamond(5, 9);
+    ctx.fillRect(-12 - pulse, -10, 4, 4);
+    ctx.fillRect(8 + pulse, -10, 4, 4);
+  }
+  ctx.restore();
+}
+
 function drawEnemies() {
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
   for (const e of game.enemies) {
     if (!e.alive) continue;
     if (!e.started && (e.state === "entering" || e.state === "challenge")) continue;
@@ -1128,16 +1226,7 @@ function drawEnemies() {
     if (e.telegraph > 0) color = Math.floor(e.telegraph * 20) % 2 === 0 ? COLOR.white : COLOR.dim;
     if (e.hitFlash > 0) color = COLOR.white;
 
-    ctx.font = `${e.size}px ${FONT}`;
-    ctx.fillStyle = color;
-    ctx.fillText(e.glyph, e.x, e.y);
-
-    // Boss keeps a faint box while it still has its extra HP.
-    if (e.maxHp > 1 && e.hp > 1) {
-      const sq = e.size + 6;
-      ctx.strokeStyle = COLOR.faint; ctx.lineWidth = 1;
-      ctx.strokeRect(e.x - sq / 2, e.y - sq / 2, sq, sq);
-    }
+    drawEnemyGlyph(e, color);
     // A boss carrying your captured ship shows it docked above.
     if (e.carrying) drawShipGlyph(e.x, e.y - e.size, COLOR.dim);
   }
@@ -1359,6 +1448,15 @@ function drawButton() {
   ctx.fillText(buttonLabel(), W / 2, b.y + b.h / 2);
 }
 
+function drawEnemyLegend(y) {
+  const samples = [
+    { x: W / 2 - 34, y, tier: "boss", variant: "citadel", size: 20, hp: 2, maxHp: 2 },
+    { x: W / 2, y, tier: "goei", variant: "starwing", size: 18, hp: 1, maxHp: 1 },
+    { x: W / 2 + 34, y, tier: "zako", variant: "fork", size: 17, hp: 1, maxHp: 1 },
+  ];
+  for (const sample of samples) drawEnemyGlyph(sample, COLOR.dim, true);
+}
+
 function drawStart() {
   const layout = overlayLayout();
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1367,10 +1465,7 @@ function drawStart() {
   ctx.fillStyle = COLOR.dim; ctx.font = `${OVERLAY_SUB_FONT}px ${FONT}`;
   ctx.fillText("A MINIMAL SHOOTER GAME", W / 2, layout.subtitleY);
 
-  // tiny legend of the enemy tiers
-  ctx.font = `${Math.round(14 * UI_SCALE)}px ${FONT}`;
-  ctx.fillStyle = COLOR.dim;
-  ctx.fillText("◈  ✦  ✧", W / 2, layout.legendY);
+  drawEnemyLegend(layout.legendY);
 
   drawButton();
 

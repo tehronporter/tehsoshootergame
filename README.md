@@ -37,7 +37,8 @@ Classic arcade mechanics rendered in the minimalist white-on-Klein-blue style:
 
 - **Fly-in entrances** — enemies swoop in along curved paths and settle into a
   breathing, swaying formation at the top.
-- **Enemy tiers** — boss `◈` (2 HP), goei `✦`, zako `✧`, with distinct scoring.
+- **Enemy families** — six canvas-drawn geometric characters across boss, goei,
+  and zako tiers, with distinct silhouettes and scoring.
 - **Diving attacks** — enemies peel off in banking arcs, fire, then loop back and
   rejoin their formation slot.
 - **Capture + dual fighter** — a boss can grab your ship with a tractor beam; shoot
