@@ -119,10 +119,11 @@ const BREATH_FREQ = 1.1;
 const BREATH_AMT = 0.06;       // formation expand/contract
 
 // Enemy tiers share gameplay rules but each has two canvas-drawn silhouettes.
+const ENEMY_SCALE = 0.95;
 const TIER = {
-  boss:  { variants: ["citadel", "crown"], hp: 2, form: 150, dive: 400, size: 28, hitRadius: 16 },
-  goei:  { variants: ["starwing", "splitwing"], hp: 1, form: 80, dive: 160, size: 25, hitRadius: 14.5 },
-  zako:  { variants: ["needle", "fork"], hp: 1, form: 50, dive: 100, size: 23, hitRadius: 13.5 },
+  boss:  { variants: ["citadel", "crown"], hp: 2, form: 150, dive: 400, size: 28 * ENEMY_SCALE, hitRadius: 16 * ENEMY_SCALE },
+  goei:  { variants: ["starwing", "splitwing"], hp: 1, form: 80, dive: 160, size: 25 * ENEMY_SCALE, hitRadius: 14.5 * ENEMY_SCALE },
+  zako:  { variants: ["needle", "fork"], hp: 1, form: 50, dive: 100, size: 23 * ENEMY_SCALE, hitRadius: 13.5 * ENEMY_SCALE },
 };
 
 // Attacks
